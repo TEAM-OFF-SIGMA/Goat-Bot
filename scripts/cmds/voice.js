@@ -1,58 +1,43 @@
-this.config = {
-	name: "voice",
-	version: "1.0.0",
-	author: {
-		name: "NTKhang",
-		contacts: ""
-	},
-	cooldowns: 5,
-	role: 0,
-	shortDescription: "text to speech ",
-	longDescription: "dịch văn bản sang giọng nói",
-	category: "media",
-	envGlobal: {
-		"tts-zalo": "nWaXzdlpZzdMKdcjz1DCQ2xXH5tGxm6r"
-	}
-};
+const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
 
 module.exports = {
-	config: this.config,
-	start: async function ({ api, args, message, event, download, globalGoat }) {
-		const fs = require("fs-extra");
-		const axios = require('axios');
-		const qs = require('querystring');
-		const apikey = globalGoat.configCommands.envGlobal["tts-zalo"];
+  config: {
+    name: "voice",
+    aliases: ["aniaudio"],
+    author: "Kshitiz",
+    version: "1.0",
+    cooldowns: 5,
+    role: 0,
+    shortDescription: "Get anime voice",
+    longDescription: "Get anime voice based on animeName",
+    category: "anime",
+    guide: "{p}anivoice animeName",
+  },
 
-		let content = (event.type == "message_reply") ? event.messageReply.body : args.join(" ");
-		if (!content) return api.sendMessage("Vui lòng nhập một đoạn văn bản hoặc reply một tin nhắn!", event.threadID, event.messageID);
+  onStart: async function ({ api, event, args, message }) {
+    api.setMessageReaction("🕐", event.messageID, (err) => {}, true);
+    const categories = ["jjk", "naruto", "ds", "aot", "bleach", "onepiece"];
 
-		const url = "https://api.zalo.ai/v1/tts/synthesize";
-		const path = __dirname + "/cache/texttospeech.mp3";
-		const datapush = {
-			input: content.replace(/\n/g, " "),
-			encode_type: 1,
-			speaker_id: 3// 0 | 1 | 2 | 3
-		};
+    if (args.length !== 1 || !categories.includes(args[0].toLowerCase())) {
+      return message.reply(`Please specify a valid category. Available categories: ${categories.join(", ")}`);
+    }
 
-		const result = await axios.post(url, qs.stringify(datapush), {
-			headers: {
-				apikey
-			}
-		});
-		const link = result.data.data.url;
+    try {
+      const category = args[0].toLowerCase();
+      const response = await axios.get(`https://anivoice-bjfl.onrender.com/kshitiz/${category}`, { responseType: "arraybuffer" });
 
-		let getfile;
-		let ERROR = true;
-		while (ERROR == true) {
-			try {
-				getfile = (await axios.get(link, { responseType: "arraybuffer" })).data;
-				ERROR = false;
-			}
-			catch (e) {
-				continue;
-			}
-		}
-		fs.writeFileSync(path, Buffer.from(getfile));
-		message.reply({ attachment: fs.createReadStream(path) }, () => fs.unlink(path));
-	}
+      const tempVoicePath = path.join(__dirname, "cache", `${Date.now()}.mp3`);
+      fs.writeFileSync(tempVoicePath, Buffer.from(response.data, 'binary'));
+
+      const stream = fs.createReadStream(tempVoicePath);
+      message.reply({ attachment: stream });
+
+      api.setMessageReaction("✅", event.messageID, (err) => {}, true);
+    } catch (error) {
+      console.error(error);
+      message.reply("Sorry, an error occurred while processing your request.");
+    }
+  }
 };
